@@ -3,17 +3,14 @@ pragma solidity ^0.8.19;
 
 contract SimpleStorage {
     //Functions
-    uint256 public favoriteNumber;
-
-    function store(uint256 _favoriteNumber) public {
-        favoriteNumber = _favoriteNumber;
-        // if you add the retrieve here, you will cost a bit more
-        retrieve();
+    struct Person {
+        uint256 favoriteNumber;
+        string name;
     }
+    // dynamic size array
+    Person[] public listOfPeople;
 
-    // view pure
-    function retrieve() public view returns (uint256) {
-        // this function won't cost when you call
-        return favoriteNumber;
+    function addPerson(string memory _name, uint256 _favoriteNumber) public {
+        listOfPeople.push(Person(_favoriteNumber, _name));
     }
 }
