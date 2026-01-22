@@ -1,45 +1,100 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.7;
+pragma solidity ^0.8.18;
 
+// Note: The AggregatorV3Interface might be at a different location than what was in the video!
 import {
     AggregatorV3Interface
 } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import {PriceConverter} from "./PriceConverter.sol";
+
+error NotOwner();
 
 contract FundMe {
-    uint256 public minimumUsd = 5e18;
+    using PriceConverter for uint256;
 
+    mapping(address => uint256) public addressToAmountFunded;
     address[] public funders;
-    mapping(address funder => uint256 amountFunded)
-        public addressToAmountFunded;
+
+    // Could we make this constant?  /* hint: no! We should make it immutable! */
+    address public /* immutable */ i_owner;
+    uint256 public constant MINIMUM_USD = 5 * 10 ** 18;
+
+    constructor() {
+        i_owner = msg.sender;
+    }
 
     function fund() public payable {
         require(
-            getConversionRate(msg.value) >= minimumUsd,
-            "didn't send enough money"
+            msg.value.getConversionRate() >= MINIMUM_USD,
+            "You need to spend more ETH!"
         );
-        funders.push(msg.sender);
+        // require(PriceConverter.getConversionRate(msg.value) >= MINIMUM_USD, "You need to spend more ETH!");
         addressToAmountFunded[msg.sender] += msg.value;
-    }
-
-    function getPrice() public view returns (uint256) {
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(
-            0x694AA1769357215DE4FAC081bf1f309aDC325306
-        );
-        (, int256 price, , , ) = priceFeed.latestRoundData();
-        return uint256(price * 1e10);
-    }
-
-    function getConversionRate(
-        uint256 ethAmount
-    ) public view returns (uint256) {
-        uint256 ethPrice = getPrice();
-        uint256 ethAmountInUsd = (ethPrice * ethAmount) / 1e18;
-        return ethAmountInUsd;
+        funders.push(msg.sender);
     }
 
     function getVersion() public view returns (uint256) {
-        return
-            AggregatorV3Interface(0x694AA1769357215DE4FAC081bf1f309aDC325306)
-                .version();
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(
+            0x694AA1769357215DE4FAC081bf1f309aDC325306
+        );
+        return priceFeed.version();
+    }
+
+    modifier onlyOwner() {
+        // require(msg.sender == owner);
+        if (msg.sender != i_owner) revert NotOwner();
+        _;
+    }
+
+    function withdraw() public onlyOwner {
+        for (
+            uint256 funderIndex = 0;
+            funderIndex < funders.length;
+            funderIndex++
+        ) {
+            address funder = funders[funderIndex];
+            addressToAmountFunded[funder] = 0;
+        }
+        funders = new address[](0);
+        // // transfer
+        // payable(msg.sender).transfer(address(this).balance);
+
+        // // send
+        // bool sendSuccess = payable(msg.sender).send(address(this).balance);
+        // require(sendSuccess, "Send failed");
+
+        // call
+        (bool callSuccess, ) = payable(msg.sender).call{
+            value: address(this).balance
+        }("");
+        require(callSuccess, "Call failed");
+    }
+    // Explainer from: https://solidity-by-example.org/fallback/
+    // Ether is sent to contract
+    //      is msg.data empty?
+    //          /   \
+    //         yes  no
+    //         /     \
+    //    receive()?  fallback()
+    //     /   \
+    //   yes   no
+    //  /        \
+    //receive()  fallback()
+
+    fallback() external payable {
+        fund();
+    }
+
+    receive() external payable {
+        fund();
     }
 }
+
+// Concepts we didn't cover yet (will cover in later sections)
+// 1. Enum
+// 2. Events
+// 3. Try / Catch
+// 4. Function Selector
+// 5. abi.encode / decode
+// 6. Hash with keccak256
+// 7. Yul / Assembly
